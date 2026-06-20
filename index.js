@@ -1,11 +1,7 @@
 const express = require('express');
-const crypto = require('crypto');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// तपाईंको नयाँ विवरणहरू यहाँ सिधै राखिएको छ
-const APP_KEY = "616ffcd94caa04ea";
-const SECRET_KEY = "YUKDWKH2N5RGP8L2QKW13OPBTW6D1O"; // नयाँ Secret Key अपडेट गरिएको
 const FIREBASE_DB_URL = "https://sajilokamai-72496-default-rtdb.firebaseio.com";
 
 // मुख्य पोस्टब्याक रूट (Endpoint)
@@ -16,31 +12,22 @@ app.get('/postback', async (req, res) => {
         offer_name, 
         payout, 
         event, 
-        signature, 
         amount, 
         conversionDatetime, 
         clickIp,
         currency_name
     } = req.query;
 
-    if (!user_id || !offer_id || !amount || !signature || !event) {
-        console.log("[Error] Missing parameters.");
-        return res.status(400).send("Missing parameters");
-    }
-
-    // १. Signature Validation (नयाँ Secret Key मार्फत सुरक्षा जाँच)
-    const dataToHash = `${user_id}${offer_id}${event}${APP_KEY}${SECRET_KEY}`;
-    const calculatedSignature = crypto.createHash('sha1').update(dataToHash).digest('hex');
-
-    if (signature !== calculatedSignature) {
-        console.log(`[Warning] Invalid signature hash for User: ${user_id}`);
-        return res.status(403).send("Invalid Signature");
+    // युजर आईडी र कोइन अमाउन्ट आएको छ कि छैन मात्र चेक गर्ने
+    if (!user_id || !amount) {
+        console.log("[Error] Missing user_id or amount.");
+        return res.status(400).send("Missing user_id or amount");
     }
 
     try {
         const rewardAmount = parseInt(amount, 10);
 
-        // २. पहिले युजरको हालको ब्यालेन्स कति छ भनी Firebase बाट तान्ने
+        // १. Firebase बाट युजरको हालको ब्यालेन्स तान्ने
         const userFetchUrl = `${FIREBASE_DB_URL}/users/${user_id}/balance.json`;
         const balanceRes = await fetch(userFetchUrl);
         const currentBalance = await balanceRes.json() || 0;
@@ -48,21 +35,21 @@ app.get('/postback', async (req, res) => {
         // नयाँ ब्यालेन्स हिसाब गर्ने
         const newBalance = currentBalance + rewardAmount;
 
-        // ३. Firebase मा नयाँ ब्यालेन्स अपडेट गर्ने
+        // २. Firebase मा नयाँ ब्यालेन्स सिधै अपडेट गर्ने
         await fetch(userFetchUrl, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(newBalance)
         });
 
-        // ४. अफरको पुरै विवरण 'history' भित्र थप्ने
+        // ३. अफरको पुरै विवरण 'history' भित्र थप्ने
         const historyPushUrl = `${FIREBASE_DB_URL}/users/${user_id}/history.json`;
         const historyData = {
-            offer_id: offer_id,
-            offer_name: offer_name || "Playtime Offerwall Task",
+            offer_id: offer_id || "Test_ID",
+            offer_name: offer_name || "Playtime Task",
             payout_usd: payout || "0.00",
             amount_credited: rewardAmount,
-            event_type: event,
+            event_type: event || "conversion",
             date_time: conversionDatetime || new Date().toISOString(),
             user_ip: clickIp || "0.0.0.0",
             currency: currency_name || "Coin",
