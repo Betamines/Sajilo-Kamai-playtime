@@ -5,7 +5,6 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // १. Firebase Database Connect गर्ने
-// तपाईंको image (1000039293.png) मा देखिए अनुसारको public rules भएकोले यो configuration ले सिधै काम गर्छ
 if (admin.apps.length === 0) {
     admin.initializeApp({
         databaseURL: "https://sajilokamai-72496-default-rtdb.firebaseio.com"
@@ -14,9 +13,9 @@ if (admin.apps.length === 0) {
 
 const db = admin.database();
 
-// Playtime Dashboard बाट प्राप्त हुने Environment Variables
-const APP_KEY = process.env.YOUR_APPLICATION_KEY;
-const SECRET_KEY = process.env.YOUR_APPLICATION_SECRET_KEY;
+// तपाईंको Playtime Dashboard बाट प्राप्त भएका साँचोहरू (Keys) सिधै यहाँ राखिएको छ
+const APP_KEY = "616ffcd94caa04ea";
+const SECRET_KEY = "L8VFOB8FUHVKV2N3";
 
 // मुख्य पोस्टब्याक रूट (Endpoint)
 app.get('/postback', async (req, res) => {
@@ -71,7 +70,7 @@ app.get('/postback', async (req, res) => {
             event_type: event,
             date_time: conversionDatetime || new Date().toISOString(),
             user_ip: clickIp || "0.0.0.0",
-            currency: currency_name || "Coins",
+            currency: currency_name || "Coin",
             status: "Success",
             timestamp: Date.now()
         });
