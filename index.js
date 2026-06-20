@@ -3,9 +3,9 @@ const crypto = require('crypto');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// तपाईंको Playtime Dashboard बाट प्राप्त भएका साँचोहरू (Keys)
+// तपाईंको नयाँ विवरणहरू यहाँ सिधै राखिएको छ
 const APP_KEY = "616ffcd94caa04ea";
-const SECRET_KEY = "L8VFOB8FUHVKV2N3";
+const SECRET_KEY = "YUKDWKH2N5RGP8L2QKW13OPBTW6D1O"; // नयाँ Secret Key अपडेट गरिएको
 const FIREBASE_DB_URL = "https://sajilokamai-72496-default-rtdb.firebaseio.com";
 
 // मुख्य पोस्टब्याक रूट (Endpoint)
@@ -28,7 +28,7 @@ app.get('/postback', async (req, res) => {
         return res.status(400).send("Missing parameters");
     }
 
-    // १. Signature Validation (सुरक्षा जाँच)
+    // १. Signature Validation (नयाँ Secret Key मार्फत सुरक्षा जाँच)
     const dataToHash = `${user_id}${offer_id}${event}${APP_KEY}${SECRET_KEY}`;
     const calculatedSignature = crypto.createHash('sha1').update(dataToHash).digest('hex');
 
@@ -40,7 +40,7 @@ app.get('/postback', async (req, res) => {
     try {
         const rewardAmount = parseInt(amount, 10);
 
-        // २. पहिले युजरको हालको ब्यालेन्स कति छ भनी Firebase बाट तान्ने (Fetch Current Balance)
+        // २. पहिले युजरको हालको ब्यालेन्स कति छ भनी Firebase बाट तान्ने
         const userFetchUrl = `${FIREBASE_DB_URL}/users/${user_id}/balance.json`;
         const balanceRes = await fetch(userFetchUrl);
         const currentBalance = await balanceRes.json() || 0;
@@ -48,14 +48,14 @@ app.get('/postback', async (req, res) => {
         // नयाँ ब्यालेन्स हिसाब गर्ने
         const newBalance = currentBalance + rewardAmount;
 
-        // ३. Firebase मा नयाँ ब्यालेन्स अपडेट गर्ने (Save New Balance)
+        // ३. Firebase मा नयाँ ब्यालेन्स अपडेट गर्ने
         await fetch(userFetchUrl, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(newBalance)
         });
 
-        // ४. अफरको पुरै विवरण 'history' भित्र थप्ने (Push to History)
+        // ४. अफरको पुरै विवरण 'history' भित्र थप्ने
         const historyPushUrl = `${FIREBASE_DB_URL}/users/${user_id}/history.json`;
         const historyData = {
             offer_id: offer_id,
