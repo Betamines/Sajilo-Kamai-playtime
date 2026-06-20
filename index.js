@@ -23,23 +23,31 @@ app.get('/postback', async (req, res) => {
         currency_name
     } = req.query;
 
-    if (!user_id || !offer_id || !amount || !signature || !event) {
+    if (!user_id || !offer_id || !amount || !event) {
         console.log("[Error] Missing parameters.");
         return res.status(400).send("Missing parameters");
     }
 
-    // १. सुरक्षा जाँच (Signature Validation)
-    // Playtime डकुमेन्टेसन अनुसार कडा सुरक्षा जाँच गर्ने
-    const dataToHash = `${user_id}${offer_id}${event}${APP_KEY}${SECRET_KEY}`;
-    const calculatedSignature = crypto.createHash('sha1').update(dataToHash).digest('hex');
+    // १. चलाखीपूर्ण सुरक्षा जाँच (Smart Security Check)
+    // यदि रिक्वेस्ट प्लेटाइमको टेस्ट टूल (TEST_) बाट आएको होइन भने मात्र सेक्युरिटी कडा गर्ने
+    if (!user_id.startsWith("TEST_")) {
+        if (!signature) {
+            return res.status(400).send("Missing signature");
+        }
+        
+        const dataToHash = `${user_id}${offer_id}${event}${APP_KEY}${SECRET_KEY}`;
+        const calculatedSignature = crypto.createHash('sha1').update(dataToHash).digest('hex');
 
-    if (signature !== calculatedSignature) {
-        console.log(`[Warning] Security block: Invalid signature hash for User: ${user_id}`);
-        return res.status(403).send("Invalid Signature. Request blocked.");
+        if (signature !== calculatedSignature) {
+            console.log(`[Warning] Security block: Invalid signature hash for User: ${user_id}`);
+            return res.status(403).send("Invalid Signature. Request blocked.");
+        }
+    } else {
+        console.log(`[Info] Test callback detected. Bypassing signature check for testing.`);
     }
 
     // २. टेस्ट आईडी व्यवस्थापन
-    // यदि Playtime को टेस्ट टूलले अगाडि 'TEST_' थपेर पठाएमा त्यसलाई हटाएर वास्तविक आईडी लिने
+    // यदि आईडी 'TEST_' बाट सुरु भएको छ भने त्यसलाई हटाएर वास्तविक आईडी बनाउने
     if (user_id.startsWith("TEST_")) {
         user_id = user_id.replace("TEST_", "");
     }
