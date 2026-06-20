@@ -1,25 +1,15 @@
 const express = require('express');
 const crypto = require('crypto');
-const admin = require('firebase-admin');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// १. Firebase Database Connect गर्ने
-if (admin.apps.length === 0) {
-    admin.initializeApp({
-        databaseURL: "https://sajilokamai-72496-default-rtdb.firebaseio.com"
-    });
-}
-
-const db = admin.database();
-
-// तपाईंको Playtime Dashboard बाट प्राप्त भएका साँचोहरू (Keys) सिधै यहाँ राखिएको छ
+// तपाईंको Playtime Dashboard बाट प्राप्त भएका साँचोहरू (Keys)
 const APP_KEY = "616ffcd94caa04ea";
 const SECRET_KEY = "L8VFOB8FUHVKV2N3";
+const FIREBASE_DB_URL = "https://sajilokamai-72496-default-rtdb.firebaseio.com";
 
 // मुख्य पोस्टब्याक रूट (Endpoint)
 app.get('/postback', async (req, res) => {
-    // Playtime Ads ले पठाउने सबै प्यारामिटरहरू लिने
     const { 
         user_id, 
         offer_id, 
@@ -33,13 +23,12 @@ app.get('/postback', async (req, res) => {
         currency_name
     } = req.query;
 
-    // आवश्यक डाटाहरू आएका छन् कि छैनन् चेक गर्ने
     if (!user_id || !offer_id || !amount || !signature || !event) {
-        console.log("[Error] Missing required parameters in request.");
+        console.log("[Error] Missing parameters.");
         return res.status(400).send("Missing parameters");
     }
 
-    // २. Playtime डकुमेन्टेसन अनुसार Signature Validation (सुरक्षा जाँच)
+    // १. Signature Validation (सुरक्षा जाँच)
     const dataToHash = `${user_id}${offer_id}${event}${APP_KEY}${SECRET_KEY}`;
     const calculatedSignature = crypto.createHash('sha1').update(dataToHash).digest('hex');
 
@@ -50,19 +39,25 @@ app.get('/postback', async (req, res) => {
 
     try {
         const rewardAmount = parseInt(amount, 10);
-        
-        // तपाईंको डेटाबेसको /users/USER_ID लोकेसन Reference
-        const userRef = db.ref(`users/${user_id}`);
-        const historyRef = db.ref(`users/${user_id}/history`);
 
-        // ३. डेटाबेसमा रहेको 'balance' लाई सिधै बढाउने (Atomic Transaction)
-        await userRef.child('balance').transaction((currentBalance) => {
-            // यदि युजरको पहिले ब्यालेन्स छैन भने ० बाट सुरु गरेर बढाउँछ
-            return (currentBalance || 0) + rewardAmount;
+        // २. पहिले युजरको हालको ब्यालेन्स कति छ भनी Firebase बाट तान्ने (Fetch Current Balance)
+        const userFetchUrl = `${FIREBASE_DB_URL}/users/${user_id}/balance.json`;
+        const balanceRes = await fetch(userFetchUrl);
+        const currentBalance = await balanceRes.json() || 0;
+
+        // नयाँ ब्यालेन्स हिसाब गर्ने
+        const newBalance = currentBalance + rewardAmount;
+
+        // ३. Firebase मा नयाँ ब्यालेन्स अपडेट गर्ने (Save New Balance)
+        await fetch(userFetchUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newBalance)
         });
 
-        // ४. अफर कहाँबाट र कसरी आयो भन्ने पुरै डिटेल 'history' भित्र सेभ गर्ने
-        await historyRef.push({
+        // ४. अफरको पुरै विवरण 'history' भित्र थप्ने (Push to History)
+        const historyPushUrl = `${FIREBASE_DB_URL}/users/${user_id}/history.json`;
+        const historyData = {
             offer_id: offer_id,
             offer_name: offer_name || "Playtime Offerwall Task",
             payout_usd: payout || "0.00",
@@ -73,20 +68,23 @@ app.get('/postback', async (req, res) => {
             currency: currency_name || "Coin",
             status: "Success",
             timestamp: Date.now()
+        };
+
+        await fetch(historyPushUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(historyData)
         });
 
-        console.log(`[Success] Updated balance by +${rewardAmount} & saved full details for User: ${user_id}`);
-        
-        // Playtime Ads लाई काम सफल भयो भनी 'OK' रेस्पोन्स पठाउने
+        console.log(`[Success] Updated balance by +${rewardAmount} for User: ${user_id}`);
         return res.status(200).send("OK");
 
     } catch (error) {
-        console.error("Firebase Database Operation Error:", error);
+        console.error("Firebase Operation Error:", error);
         return res.status(500).send("Internal Server Error");
     }
 });
 
-// सर्भर अन गर्ने
 app.listen(PORT, () => {
     console.log(`Postback server is successfully running on port ${PORT}`);
 });
