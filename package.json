@@ -1,0 +1,16 @@
+{
+  "name": "playtime-firebase-postback",
+  "version": "1.0.0",
+  "description": "Playtime Ads Postback Server for Sajilo Kamai",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "firebase-admin": "^12.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
