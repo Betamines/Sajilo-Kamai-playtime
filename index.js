@@ -1,33 +1,53 @@
 const express = require('express');
+const crypto = require('crypto');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// तपाईंको विवरणहरू र सुरक्षा साँचो (Secret Key)
+const APP_KEY = "616ffcd94caa04ea";
+const SECRET_KEY = "YUKDWKH2N5RGP8L2QKW13OPBTW6D1O"; 
 const FIREBASE_DB_URL = "https://sajilokamai-72496-default-rtdb.firebaseio.com";
 
 // मुख्य पोस्टब्याक रूट (Endpoint)
 app.get('/postback', async (req, res) => {
-    const { 
+    let { 
         user_id, 
         offer_id, 
         offer_name, 
         payout, 
         event, 
+        signature, 
         amount, 
         conversionDatetime, 
         clickIp,
         currency_name
     } = req.query;
 
-    // युजर आईडी र कोइन अमाउन्ट आएको छ कि छैन मात्र चेक गर्ने
-    if (!user_id || !amount) {
-        console.log("[Error] Missing user_id or amount.");
-        return res.status(400).send("Missing user_id or amount");
+    if (!user_id || !offer_id || !amount || !signature || !event) {
+        console.log("[Error] Missing parameters.");
+        return res.status(400).send("Missing parameters");
+    }
+
+    // १. सुरक्षा जाँच (Signature Validation)
+    // Playtime डकुमेन्टेसन अनुसार कडा सुरक्षा जाँच गर्ने
+    const dataToHash = `${user_id}${offer_id}${event}${APP_KEY}${SECRET_KEY}`;
+    const calculatedSignature = crypto.createHash('sha1').update(dataToHash).digest('hex');
+
+    if (signature !== calculatedSignature) {
+        console.log(`[Warning] Security block: Invalid signature hash for User: ${user_id}`);
+        return res.status(403).send("Invalid Signature. Request blocked.");
+    }
+
+    // २. टेस्ट आईडी व्यवस्थापन
+    // यदि Playtime को टेस्ट टूलले अगाडि 'TEST_' थपेर पठाएमा त्यसलाई हटाएर वास्तविक आईडी लिने
+    if (user_id.startsWith("TEST_")) {
+        user_id = user_id.replace("TEST_", "");
     }
 
     try {
         const rewardAmount = parseInt(amount, 10);
 
-        // १. Firebase बाट युजरको हालको ब्यालेन्स तान्ने
+        // ३. Firebase बाट युजरको वास्तविक ब्यालेन्स तान्ने
         const userFetchUrl = `${FIREBASE_DB_URL}/users/${user_id}/balance.json`;
         const balanceRes = await fetch(userFetchUrl);
         const currentBalance = await balanceRes.json() || 0;
@@ -35,21 +55,21 @@ app.get('/postback', async (req, res) => {
         // नयाँ ब्यालेन्स हिसाब गर्ने
         const newBalance = currentBalance + rewardAmount;
 
-        // २. Firebase मा नयाँ ब्यालेन्स सिधै अपडेट गर्ने
+        // ४. Firebase मा नयाँ ब्यालेन्स अपडेट गर्ने
         await fetch(userFetchUrl, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(newBalance)
         });
 
-        // ३. अफरको पुरै विवरण 'history' भित्र थप्ने
+        // ५. अफरको पुरै विवरण 'history' भित्र थप्ने
         const historyPushUrl = `${FIREBASE_DB_URL}/users/${user_id}/history.json`;
         const historyData = {
-            offer_id: offer_id || "Test_ID",
+            offer_id: offer_id,
             offer_name: offer_name || "Playtime Task",
             payout_usd: payout || "0.00",
             amount_credited: rewardAmount,
-            event_type: event || "conversion",
+            event_type: event,
             date_time: conversionDatetime || new Date().toISOString(),
             user_ip: clickIp || "0.0.0.0",
             currency: currency_name || "Coin",
@@ -63,7 +83,7 @@ app.get('/postback', async (req, res) => {
             body: JSON.stringify(historyData)
         });
 
-        console.log(`[Success] Updated balance by +${rewardAmount} for User: ${user_id}`);
+        console.log(`[Success] Verified & Updated balance by +${rewardAmount} for User: ${user_id}`);
         return res.status(200).send("OK");
 
     } catch (error) {
@@ -73,5 +93,5 @@ app.get('/postback', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Postback server is successfully running on port ${PORT}`);
+    console.log(`Secured Postback server is successfully running on port ${PORT}`);
 });
